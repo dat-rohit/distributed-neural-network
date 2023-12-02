@@ -13,10 +13,7 @@ import argparse
 from models.model import Network
 
 
-
-
 if __name__ == '__main__':    
-
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(device)
@@ -37,6 +34,8 @@ if __name__ == '__main__':
     testloader = torch.utils.data.DataLoader(test, batch_size=batch_size,
                                             shuffle=False, num_workers=2)
 
+    print(len(trainloader.dataset))
+    print(len(testloader.dataset))
 
     model = Network()
     model.to(device=device)
@@ -45,13 +44,12 @@ if __name__ == '__main__':
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
 
-    for epoch in range(2):  # loop over the dataset multiple times
+    for epoch in range(6):  # loop over the dataset multiple times
 
         running_loss = 0.0
         for i, data in enumerate(trainloader, 0):
             # get the inputs; data is a list of [inputs, labels]
             inputs, labels = data[0].to(device), data[1].to(device)
-
             # zero the parameter gradients
             optimizer.zero_grad()
 
@@ -67,3 +65,24 @@ if __name__ == '__main__':
                 print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
                 running_loss = 0.0
 
+    
+        # Evaluation loop on the test set
+        model.eval()  # Set the model to evaluation mode
+        correct = 0
+        total = 0
+        test_loss = 0.0
+
+        with torch.no_grad():
+            for i, data in enumerate(testloader, 0):
+                inputs, labels = data[0].to(device), data[1].to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                test_loss += loss.item()
+
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+        # Print validation accuracy and loss
+        print('Validation Accuracy: %.2f %%' % (100 * correct / total))
+        print('Validation Loss: %.3f' % (test_loss / len(testloader)))
