@@ -4,34 +4,36 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as data
+import torch.distributed as dist
 import torchvision.transforms as transforms
 import numpy as np
 import os 
 import argparse
+import torchvision
+
 
 from models.model import Network
 from mpi4py import MPI
 
 def train(model, dataloader, criterion, optimizer, device):
-    for epoch in range(6):  # loop over the dataset multiple times
-        running_loss = 0.0
-        for i, data in enumerate(dataloader, 0):
-            # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = data[0].to(device), data[1].to(device)
-            # zero the parameter gradients
-            optimizer.zero_grad()
+    running_loss = 0.0
+    for i, data in enumerate(dataloader, 0):
+        # get the inputs; data is a list of [inputs, labels]
+        inputs, labels = data[0].to(device), data[1].to(device)
+        # zero the parameter gradients
+        optimizer.zero_grad()
 
-            # forward + backward + optimize
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
+        # forward + backward + optimize
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
 
-            # print statistics
-            running_loss += loss.item()
-            if i % 2000 == 1999:    # print every 2000 mini-batches
-                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-                running_loss = 0.0
+        # print statistics
+        running_loss += loss.item()
+        if i % 2000 == 1999:    # print every 2000 mini-batches
+            print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+            running_loss = 0.0
 
 def evaluate(model, dataloader, criterion, device):
     model.eval()  # Set the model to evaluation mode
@@ -51,6 +53,14 @@ def evaluate(model, dataloader, criterion, device):
             correct += (predicted == labels).sum().item()
 
     return correct, total, test_loss
+
+
+def average_gradients(model):
+    #size = float(dist.get_world_size())
+    for param in model.parameters():
+        dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
+        param.grad.data /= size
+
 
 if __name__ == '__main__':
     comm = MPI.COMM_WORLD
@@ -81,14 +91,37 @@ if __name__ == '__main__':
     optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
     for epoch in range(6):
-        train(model, train_loader, criterion, optimizer, device)
+        #train(model, train_loader, criterion, optimizer, device)
 
-        # Synchronize before evaluation
-        comm.Barrier()
+        running_loss = 0.0
+        for i, data in enumerate(train_loader, 0):
+        # get the inputs; data is a list of [inputs, labels]
+            inputs, labels = data[0].to(device), data[1].to(device)
+            # zero the parameter gradients
+            optimizer.zero_grad()
+
+            # forward + backward + optimize
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+
+            # Synchronize before gradient sharing
+            comm.Barrier()
+
+            average_gradients(model)
+            optimizer.step()
+
+            # print statistics
+            running_loss += loss.item()
+            if i % 2000 == 1999:    # print every 2000 mini-batches
+                print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
+                running_loss = 0.0
+       
 
         # Evaluation on the test set
         correct, total, test_loss = evaluate(model, test_loader, criterion, device)
-
+        print(correct, total, test_loss)
+        print('scores')
         # Reduce accuracy and loss across all processes
         total_correct = comm.allreduce(correct, op=MPI.SUM)
         total_samples = comm.allreduce(total, op=MPI.SUM)
