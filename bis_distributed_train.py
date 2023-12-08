@@ -18,6 +18,8 @@ import os
 import argparse
 from collections import OrderedDict
 
+import neptune
+
 
 transform = transforms.Compose([
         transforms.ToTensor(),
@@ -46,32 +48,57 @@ def main(args):
         
     if rank == 0:
 
-        for i in range(args.epochs):
+        
+        run = neptune.init_run(
+            project="dat-rohit/PDP-project",
+            api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJkNzJhNzAwMy04OWU5LTQ2NzgtOTA2Zi05YWZiZTNhZTI0MTkifQ==",
+        )  # your credentials
+
+        params = {"learning_rate": 0.001, "optimizer": "SGD", "model_name": "distmodel", "epochs" : 10}
+        run["parameters"] = params
+
+        for i in range(int(args.epochs)):
             print("Starting epoch ", i)
             [comm.send(model.state_dict(), k) for k in range(1, size)]
-            run_parent(model=model, comm=comm, size=size, testLoader=testLoader)
+            run_parent(model=model, comm=comm, size=size, testLoader=testLoader, run=run)
     else:
 
-        for i in range(args.epochs):
+        for i in range(int(args.epochs)):
             model.load_state_dict(comm.recv())
             run_child(model=model, comm=comm, trainLoader=trainLoader)
 
 
-def eval(model, testLoader):
+def eval(model, testLoader, run):
 
     model.eval()
     with torch.no_grad():
         losses=[]
+        corrects = 0
+        total_samples = 0
         for i, (input, target) in enumerate(testLoader, 0):
-            loss=criterion(model(input), target)
+            output = model(input)
+            loss = criterion(output, target)
             losses.append(loss.item())
+
+
+            # calculate accuracy
+            corrects += (torch.argmax(output, dim=1) == target).sum().item()
+            total_samples += target.size(0)
+
+        avg_loss = np.mean(losses)
+        accuracy_val = 100 * corrects / total_samples
+
+        run["val/loss"].append(avg_loss)
+        run["val/acc"].append(accuracy_val)
 
         print("Validation loss of updated master model: ", np.mean(losses))
 
 def run_child(model, comm, trainLoader):
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-    
+    total_loss = 0.0
+    total_batches = 0
+
     for i, (input, target) in enumerate(trainLoader, 0):
 
         optimizer.zero_grad()
@@ -80,19 +107,26 @@ def run_child(model, comm, trainLoader):
         loss.backward()
         optimizer.step()
 
-    comm.send(model.state_dict(), 0)
+        # accumulate the loss
+        total_loss += loss.item()
+        total_batches += 1
 
+    comm.send({'state_dict': model.state_dict(), 'total_loss': total_loss}, 0)
 #TODO code run_parent anb main function
 #Code gradient upload and parameter synchronization
 #Code dataset partitioner
 
 
-def run_parent(model, comm, size, testLoader):
-    state_dicts = []
-
+def run_parent(model, comm, size, testLoader, run):
+    state_dicts = []    
+    total_batches = 0
+    total_losses = 0.0
     #receive the model parameters of all children process
     for p in range(size-1):
-        state_dicts.append(comm.recv())
+        data = comm.recv()
+        state_dicts.append(data['state_dict'])
+        total_losses += data['total_loss']
+        total_batches += len(data['state_dict'])  
         print("(Received a trained model from process {0} of {1} workers...)".format(p+1, size-1))
 
 
@@ -104,9 +138,14 @@ def run_parent(model, comm, size, testLoader):
     #update the master model with the synchronized parameters
     print("* Averaging models...")
     model.load_state_dict(avg_state_dict)
+
+    global_avg_loss = total_losses / float(total_batches)
+    print(f"Global Average Training Loss: {global_avg_loss}")
+    run["train/loss"].append(global_avg_loss)
+
     
     print("evaluating model")
-    eval(model, testLoader)
+    eval(model, testLoader, run)
 
 
 
