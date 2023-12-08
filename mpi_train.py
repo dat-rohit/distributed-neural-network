@@ -13,27 +13,9 @@ import torchvision
 
 
 from models.model import Network
-from mpi4py import MPI
+#from mpi4py import MPI
 
-def train(model, dataloader, criterion, optimizer, device):
-    running_loss = 0.0
-    for i, data in enumerate(dataloader, 0):
-        # get the inputs; data is a list of [inputs, labels]
-        inputs, labels = data[0].to(device), data[1].to(device)
-        # zero the parameter gradients
-        optimizer.zero_grad()
 
-        # forward + backward + optimize
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
-
-        # print statistics
-        running_loss += loss.item()
-        if i % 2000 == 1999:    # print every 2000 mini-batches
-            print(f'[{epoch + 1}, {i + 1:5d}] loss: {running_loss / 2000:.3f}')
-            running_loss = 0.0
 
 def evaluate(model, dataloader, criterion, device):
     model.eval()  # Set the model to evaluation mode
@@ -56,16 +38,28 @@ def evaluate(model, dataloader, criterion, device):
 
 
 def average_gradients(model):
-    #size = float(dist.get_world_size())
+    size = float(dist.get_world_size())
     for param in model.parameters():
         dist.all_reduce(param.grad.data, op=dist.ReduceOp.SUM)
+        #param.grad.data = comm.allreduce(param.grad.data, op=MPI.SUM)
+
         param.grad.data /= size
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--local-rank", type=int)
+    args = parser.parse_args()
+
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'     
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     size = comm.Get_size()
+
+    print(torch.distributed.is_mpi_available())
+    dist.init_process_group(backend='gloo')
+
 
     device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
     print(f"Process {rank}/{size} is using device {device}")

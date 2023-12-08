@@ -38,7 +38,9 @@ def eval(model):
             loss=criterion(model(input), target)
             losses.append(loss.item())
 
-def run_child(model, comm, args):
+        print("Validation loss of updated master model: ", np.mean(losses))
+
+def run_child(model, comm):
 
     trainLoader = data.DataLoader(
         torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform),
@@ -48,7 +50,6 @@ def run_child(model, comm, args):
     )
 
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
-
     
     for i, (input, target) in enumerate(trainLoader):
 
@@ -57,6 +58,7 @@ def run_child(model, comm, args):
         loss=criterion(output, target)
         loss.backward()
         optimizer.step()
+
     comm.send(model.state_dict(), 0)
 
 #TODO code run_parent anb main function
@@ -64,7 +66,7 @@ def run_child(model, comm, args):
 #Code dataset partitioner
 
 
-def run_parent(model, comm, size, args):
+def run_parent(model, comm, size):
     state_dicts = []
 
 
@@ -79,6 +81,8 @@ def run_parent(model, comm, size, args):
     
     #update the master model with the synchronized parameters
     model.load_state_dict(avg_state_dict)
+    
+    eval(model)
 
 def main(args):
 
@@ -92,7 +96,15 @@ def main(args):
     if rank == 0:
 
         for i in range(args.epochs):
-            comm.send(model.state_dict(), k) for k in
+            print("Starting epoch ", i)
+            [comm.send(model.state_dict(), k) for k in range(1, size)]
+            run_parent(model=model, comm=comm, size=size)
+    else:
+        for i in range(args.epochs):
+            model.load_state_dict(comm.recv())
+            run_child(model=model, comm=comm)
+
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
