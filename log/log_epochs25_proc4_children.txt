@@ -1,0 +1,3 @@
+Train data loading time: 6.1927266120910645
+Time spent on training: 734.598509311676
+Time spent on children communication: 0.23488306999206543
