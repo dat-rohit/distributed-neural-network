@@ -1,0 +1,3 @@
+Eval data loading time: 2.585136890411377
+Time spent on evaluation: 107.16500401496887
+Time spent on parent communication and param sync: 0.24200725555419922
