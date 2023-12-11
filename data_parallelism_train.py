@@ -38,6 +38,14 @@ mpi_communication_time_children = 0.0
 
 
 
+def simulate_failure(rank, args):
+    # Simulate process failure with the specified probability
+    if np.random.rand() < float(args.failure_probability):
+        print(f"Process {rank} failed! Sleeping for {args.failure_duration} seconds.")
+        time.sleep(float(args.failure_duration))
+        print(f"Process {rank} woke up!")
+
+
 def partition_dataset(dataset, rank, size):
     total_size = len(dataset)
     partition_size = total_size // (size-1)
@@ -106,6 +114,7 @@ def main(args):
         for i in range(int(args.epochs)):
             print("Starting epoch ", i)
             start_time=time.time()
+            simulate_failure(rank, args)
             [comm.send(model.state_dict(), k) for k in range(1, size)]
             end_time=time.time()
             mpi_communication_time_parent+=end_time-start_time
@@ -129,6 +138,7 @@ def main(args):
             end_time=time.time()
             mpi_communication_time_children+=end_time-start_time
 
+            simulate_failure(rank, args)
             run_child(model=model, comm=comm, trainLoader=trainLoader)
         if rank==2:
             log_filename = f"bs{args.bs}_log_epochs{args.epochs}_proc{args.nb_proc}_children.txt"
@@ -253,6 +263,10 @@ if __name__ == '__main__':
     parser.add_argument("--batch-size", dest="bs", default=16)
     parser.add_argument("--epochs", dest="epochs", default=25)
     parser.add_argument("--nb-proc", dest="nb_proc", default=4)
+    parser.add_argument("--failure-probability", dest="failure_probability", default=0.0,
+                    help="Probability of simulated process failure at each epoch")
+    parser.add_argument("--failure-duration", dest="failure_duration", default=0.0,
+                    help="Duration of simulated process failure in seconds")
 
     args = parser.parse_args()
     main(args)
