@@ -7,7 +7,7 @@ This repository contains the source code for training a Convolutional Neural Net
 
 ### [models/model.py](models/model.py)
 
-This file contains the implementation of the CNN architecture used in the training process. Feel free to explore and modify the model structure based on your requirements.
+This file contains the implementation of the CNN architecture used in the training process.
 
 ## Training Scripts
 
@@ -24,3 +24,6 @@ In this script, the training is performed with only model replication over proce
 The core script that implements the data parallelism approach. It includes time measurement functionalities and a fault tolerance simulation. This approach distributes the computational workload across multiple processes, aiming to improve training efficiency.
 
 ## Usage
+```python
+mpiexec -n {number of process} python data_parallelism_train.py --nb-proc {number of process} 
+```
