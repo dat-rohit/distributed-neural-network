@@ -1,7 +1,7 @@
 # Enhancing CNN Training on CIFAR-10 Through MPI Parallelization
 
 
-This repository contains the source code for training a Convolutional Neural Network (CNN) using different parallelization strategies. Below is a brief overview of the key components:
+This repository contains the source code for training a Convolutional Neural Network (CNN) using different parallelization strategies, [Project_Report](Project_Report.pdf) synthetizes the experiments led during this project. Below is a brief overview of the key components:
 
 ## Models
 
