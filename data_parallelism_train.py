@@ -105,7 +105,7 @@ def main(args):
 
         run = neptune.init_run(
             project="dat-rohit/PDP-project",
-            api_token="eyJhcGlfYWRkcmVzcyI6Imh0dHBzOi8vYXBwLm5lcHR1bmUuYWkiLCJhcGlfdXJsIjoiaHR0cHM6Ly9hcHAubmVwdHVuZS5haSIsImFwaV9rZXkiOiJkNzJhNzAwMy04OWU5LTQ2NzgtOTA2Zi05YWZiZTNhZTI0MTkifQ==",
+            api_token="",
         )  # your credentials
 
         params = {"learning_rate": 0.001, "optimizer": "SGD", "model_name": "distmodel", "epochs" : int(args.epochs)}
